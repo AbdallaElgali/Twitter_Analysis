@@ -4,59 +4,47 @@ import requests
 from requests_oauthlib import OAuth1
 from tokens import consumer_key, consumer_secret, access_token, access_token_secret
 
-def get_retweeting_users(tweet_id):
+def get_retweeting_users(tweet_id, pag_token, all_retweets, limit):
     base_url = f'https://api.twitter.com/2/tweets/{tweet_id}/retweeted_by'
 
-    # Initialize an empty list to store all retweets
-    all_retweets = []
-
-    # Make the initial request to retrieve the first batch of retweets
-    params = {
-        'max_results': 100,  # Number of retweets per request
-        'tweet.fields': 'id,author_id',  # Additional fields to include in the response
-        'user.fields': 'id,username,location'
-    }
     auth = OAuth1(
         consumer_key,
         consumer_secret,
         access_token,
         access_token_secret
     )
-    response = requests.get(base_url, params=params, auth=auth)
-
-    if response.status_code == 200:
-        retweets = response.json().get('data', [])
-        all_retweets.extend(retweets)
-
-        # Check if there are more retweets available
-        while 'next_token' in response.json().get('meta', {}):
-            next_token = response.json()['meta']['next_token']
-            params['pagination_token'] = next_token
-
-            # Make the next request to retrieve the next batch of retweets
-            response = requests.get(base_url, params=params, auth=auth)
-
-            if response.status_code == 200:
-                retweets = response.json().get('data', [])
-                all_retweets.extend(retweets)
-            else:
-                print(f"Error: {response.status_code} - {response.text}")
-                break
-    else:
-        print(f"Error: {response.status_code} - {response.text}")
-
-    quotes = []
-    for retweet in all_retweets:
-        original_tweet_id = retweet['referenced_tweets'][0]['id']  # Get the ID of the original tweet
-        original_tweet = get_tweet_info(original_tweet_id)  # Fetch the original tweet
-        if original_tweet and 'quoted' in original_tweet.get('referenced_tweets', []):
-            retweet['is_quote'] = True
-            quotes.append(retweet)
-            all_retweets.remove(retweet)
+    if limit > 0:
+        if pag_token is not None:
+            params = {
+                'max_results': 100,  # Number of retweets per request
+                'tweet.fields': 'id,author_id',  # Additional fields to include in the response
+                'user.fields': 'id,username,location',
+                'pagination_token': pag_token
+            }
         else:
-            retweet['is_quote'] = False
+            params = {
+                'max_results': 100,  # Number of retweets per request
+                'tweet.fields': 'id,author_id',  # Additional fields to include in the response
+                'user.fields': 'id,username,location'
+            }
+        response = requests.get(base_url, auth=auth, params=params)
+        if response.status_code == 200:
+            retweets = response.json().get('data', [])
+            all_retweets.extend(retweets)
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
 
-    return all_retweets, quotes
+        if 'next_token' in response.json().get('meta', {}):
+            next_token = response.json().get('meta', {}).get('next_token')
+            return get_retweeting_users(tweet_id, next_token, all_retweets, limit - 1)
+        else:
+            return all_retweets
+    else:
+        wait_time = 900
+        print('Rate Limit Reached! Waiting for next request...')
+        print(f'Waiting for {wait_time / 60} minutes')
+        time.sleep(wait_time + 5)
+        return get_retweeting_users(tweet_id, pag_token, all_retweets, 5)
 
 def get_user_info_by_id(user_id):
     # Twitter API endpoint URL
