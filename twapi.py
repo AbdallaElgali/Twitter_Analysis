@@ -4,6 +4,8 @@ import requests
 from requests_oauthlib import OAuth1
 from tokens import consumer_key, consumer_secret, access_token, access_token_secret
 
+XP_006 = 1725359481222263097
+
 def get_retweeting_users(tweet_id, pag_token, all_retweets, limit):
     base_url = f'https://api.twitter.com/2/tweets/{tweet_id}/retweeted_by'
 
