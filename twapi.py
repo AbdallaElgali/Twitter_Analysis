@@ -2,9 +2,9 @@ import json
 import time
 import requests
 from requests_oauthlib import OAuth1
-from tokens import consumer_key, consumer_secret, access_token, access_token_secret
+from tokens import consumer_key, consumer_secret, access_token, access_token_secret, bearer_token
 
-XP_006 = 1725359481222263097
+
 
 def get_retweeting_users(tweet_id, pag_token, all_retweets, limit):
     base_url = f'https://api.twitter.com/2/tweets/{tweet_id}/retweeted_by'
@@ -242,79 +242,44 @@ def get_user_tweets_by_date(user_id, start_date, end_date):
         print('Unexpected Error:', e)
 
 
-def get_all_liking_users(tweet_id):
+def get_all_liking_users(tweet_id, pag_token, all_liking_users, limit):
     base_url = f'https://api.twitter.com/2/tweets/{tweet_id}/liking_users'
-    all_liking_users = []
 
-    params = {
-        'user.fields': 'id,name,username,location'
+    header = {
+        'Authorization': f'Bearer {bearer_token}',
+        'Content-Type': 'application/json'
     }
 
-    auth = OAuth1(
-        consumer_key,
-        consumer_secret,
-        access_token,
-        access_token_secret
-    )
+    if limit > 0:
+        if pag_token is not None:
+            params = {
+                'user.fields': 'id,username,location',
+                'pagination_token': pag_token
+            }
+        else:
+            params = {
+                'user.fields': 'id,username,location'
+            }
+        response = requests.get(base_url, params=params, headers=header)
+        if response.status_code == 200:
+            liking_users = response.json().get('data', [])
+            all_liking_users.extend(liking_users)
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
 
-    try:
-        remaining_requests = 13  # Initial number of remaining requests
-        reset_time = time.time() + 900  # Set initial reset time (15 minutes)
-
-        while remaining_requests > 0:
-            # Check if rate limit will be exceeded in the next request
-            if remaining_requests < 2:
-                wait_time = reset_time - time.time()
-                print(f"Rate limit about to be reached. Waiting for {wait_time:.0f} seconds...")
-                time.sleep(wait_time)
-                reset_time = time.time() + 900  # Reset the reset time
-                remaining_requests = 75  # Reset the remaining requests counter
-
-            response = requests.get(base_url, params=params, auth=auth)
-
-            if response.status_code == 200:
-                liking_users = response.json().get('data', [])
-                all_liking_users.extend(liking_users)
-
-                # Update remaining requests and reset time
-                remaining_requests -= 1
-            elif response.status_code == 429:
-                print("Rate limit exceeded. Waiting for rate limit reset...")
-                reset_time = int(response.headers['x-rate-limit-reset'])
-                time.sleep(reset_time - time.time() + 5)  # Wait for reset (+5 seconds buffer)
-                remaining_requests = 13  # Reset the remaining requests counter
-            else:
-                print(f"Error: {response.status_code} - {response.text}")
-                break
-
-            # Check if there are more liking users available
-            if 'next_token' not in response.json().get('meta', {}):
-                break
-
-            next_token = response.json()['meta']['next_token']
-            params['pagination_token'] = next_token
-
-    except requests.RequestException as e:
-        print('Request Error:', e)
-    except Exception as e:
-        print('Unexpected Error:', e)
-
-    return all_liking_users
+        if 'next_token' in response.json().get('meta', {}):
+            next_token = response.json().get('meta', {}).get('next_token')
+            return get_all_liking_users(tweet_id, next_token, all_liking_users, limit - 1)
+        else:
+            return all_liking_users
+    else:
+        wait_time = 900
+        print('Rate Limit Reached! Waiting for next request...')
+        print(f'Waiting for {wait_time / 60} minutes')
+        time.sleep(wait_time + 5)
+        return get_all_liking_users(tweet_id, pag_token, all_liking_users, 25)
 
 
 def save_data(file_name, data):
     with open(f'{file_name}.json', 'w+') as f:
         json.dump(data, f, indent=4)
-
-
-'''
-tweet_id = 1790787721973157933
-conversation_id = 1790786883972165843
-tweet_info = get_tweet_info(tweet_id)
-reply_authors = get_tweet_reply_authors(conversation_id)
-
-with open('author_ids.json', 'w') as json_file:
-    json.dump(reply_authors, json_file, indent=4)
-with open('tweet_info.json', 'w') as json_file:
-    json.dump(tweet_info, json_file, indent=4)
-'''
