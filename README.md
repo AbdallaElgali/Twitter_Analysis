@@ -4,5 +4,4 @@
  * automate.py: the controller script which runs through each tweet from a hash table of tweet_ids to retrieve certain metrics through the functions written under twapi.py
  * main.py: another controller script which interacts with the twitter api through the twapi.py script
  * all (.json) files: the output of the program after running through various search metrics.
- * Analysis.xlsx: the summary written based on the data collected.
    
